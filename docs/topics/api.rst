@@ -26,11 +26,20 @@ contains a dictionary of all available extensions and their order similar to
 how you :ref:`configure the downloader middlewares
 <topics-downloader-middleware-setting>`.
 
-.. class:: Crawler(spidercls, settings)
+.. autoclass:: Crawler
+    :members: get_addon, get_downloader_middleware, get_extension,
+        get_item_pipeline, get_spider_middleware
 
     The Crawler object must be instantiated with a
     :class:`scrapy.Spider` subclass and a
     :class:`scrapy.settings.Settings` object.
+
+    .. attribute:: request_fingerprinter
+
+        The request fingerprint builder of this crawler.
+
+        This is used from extensions and middlewares to build short, unique
+        identifiers for requests. See :ref:`request-fingerprints`.
 
     .. attribute:: settings
 
@@ -93,7 +102,7 @@ how you :ref:`configure the downloader middlewares
 
         Starts the crawler by instantiating its spider class with the given
         ``args`` and ``kwargs`` arguments, while setting the execution engine in
-        motion.
+        motion. Should be called only once.
 
         Returns a deferred that is fired when the crawl is finished.
 
@@ -125,16 +134,15 @@ Settings API
     precedence over lesser ones when setting and retrieving values in the
     :class:`~scrapy.settings.Settings` class.
 
-    .. highlight:: python
-
-    ::
+    .. code-block:: python
 
         SETTINGS_PRIORITIES = {
-            'default': 0,
-            'command': 10,
-            'project': 20,
-            'spider': 30,
-            'cmdline': 40,
+            "default": 0,
+            "command": 10,
+            "addon": 15,
+            "project": 20,
+            "spider": 30,
+            "cmdline": 40,
         }
 
     For a detailed explanation on each settings sources, see:
