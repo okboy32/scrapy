@@ -16,7 +16,9 @@ deliver the arguments that the handler receives.
 You can connect to signals (or send your own) through the
 :ref:`topics-api-signals`.
 
-Here is a simple example showing how you can catch signals and perform some action::
+Here is a simple example showing how you can catch signals and perform some action:
+
+.. code-block:: python
 
     from scrapy import signals
     from scrapy import Spider
@@ -30,17 +32,14 @@ Here is a simple example showing how you can catch signals and perform some acti
             "http://www.dmoz.org/Computers/Programming/Languages/Python/Resources/",
         ]
 
-
         @classmethod
         def from_crawler(cls, crawler, *args, **kwargs):
             spider = super(DmozSpider, cls).from_crawler(crawler, *args, **kwargs)
             crawler.signals.connect(spider.spider_closed, signal=signals.spider_closed)
             return spider
 
-
         def spider_closed(self, spider):
-            spider.logger.info('Spider closed: %s', spider.name)
-
+            spider.logger.info("Spider closed: %s", spider.name)
 
         def parse(self, response):
             pass
@@ -51,16 +50,21 @@ Deferred signal handlers
 ========================
 
 Some signals support returning :class:`~twisted.internet.defer.Deferred`
-objects from their handlers, allowing you to run asynchronous code that
-does not block Scrapy. If a signal handler returns a
-:class:`~twisted.internet.defer.Deferred`, Scrapy waits for that
-:class:`~twisted.internet.defer.Deferred` to fire.
+or :term:`awaitable objects <awaitable>` from their handlers, allowing
+you to run asynchronous code that does not block Scrapy. If a signal
+handler returns one of these objects, Scrapy waits for that asynchronous
+operation to finish.
 
-Let's take an example::
+Let's take an example using :ref:`coroutines <topics-coroutines>`:
+
+.. code-block:: python
+
+    import scrapy
+
 
     class SignalSpider(scrapy.Spider):
-        name = 'signals'
-        start_urls = ['http://quotes.toscrape.com/page/1/']
+        name = "signals"
+        start_urls = ["https://quotes.toscrape.com/page/1/"]
 
         @classmethod
         def from_crawler(cls, crawler, *args, **kwargs):
@@ -68,28 +72,26 @@ Let's take an example::
             crawler.signals.connect(spider.item_scraped, signal=signals.item_scraped)
             return spider
 
-        def item_scraped(self, item):
+        async def item_scraped(self, item):
             # Send the scraped item to the server
-            d = treq.post(
-                'http://example.com/post',
-                json.dumps(item).encode('ascii'),
-                headers={b'Content-Type': [b'application/json']}
+            response = await treq.post(
+                "http://example.com/post",
+                json.dumps(item).encode("ascii"),
+                headers={b"Content-Type": [b"application/json"]},
             )
 
-            # The next item will be scraped only after
-            # deferred (d) is fired
-            return d
+            return response
 
         def parse(self, response):
-            for quote in response.css('div.quote'):
+            for quote in response.css("div.quote"):
                 yield {
-                    'text': quote.css('span.text::text').get(),
-                    'author': quote.css('small.author::text').get(),
-                    'tags': quote.css('div.tags a.tag::text').getall(),
+                    "text": quote.css("span.text::text").get(),
+                    "author": quote.css("small.author::text").get(),
+                    "tags": quote.css("div.tags a.tag::text").getall(),
                 }
 
 See the :ref:`topics-signals-ref` below to know which signals support
-:class:`~twisted.internet.defer.Deferred`.
+:class:`~twisted.internet.defer.Deferred` and :term:`awaitable objects <awaitable>`.
 
 .. _topics-signals-ref:
 
@@ -157,8 +159,9 @@ item_scraped
     :param spider: the spider which scraped the item
     :type spider: :class:`~scrapy.Spider` object
 
-    :param response: the response from where the item was scraped
-    :type response: :class:`~scrapy.http.Response` object
+    :param response: the response from where the item was scraped, or ``None``
+        if it was yielded from :meth:`~scrapy.Spider.start_requests`.
+    :type response: :class:`~scrapy.http.Response` | ``None``
 
 item_dropped
 ~~~~~~~~~~~~
@@ -177,8 +180,9 @@ item_dropped
     :param spider: the spider which scraped the item
     :type spider: :class:`~scrapy.Spider` object
 
-    :param response: the response from where the item was dropped
-    :type response: :class:`~scrapy.http.Response` object
+    :param response: the response from where the item was dropped, or ``None``
+        if it was yielded from :meth:`~scrapy.Spider.start_requests`.
+    :type response: :class:`~scrapy.http.Response` | ``None``
 
     :param exception: the exception (which must be a
         :exc:`~scrapy.exceptions.DropItem` subclass) which caused the item
@@ -199,8 +203,10 @@ item_error
     :param item: the item that caused the error in the :ref:`topics-item-pipeline`
     :type item: :ref:`item object <item-types>`
 
-    :param response: the response being processed when the exception was raised
-    :type response: :class:`~scrapy.http.Response` object
+    :param response: the response being processed when the exception was
+        raised, or ``None`` if it was yielded from
+        :meth:`~scrapy.Spider.start_requests`.
+    :type response: :class:`~scrapy.http.Response` | ``None``
 
     :param spider: the spider which raised the exception
     :type spider: :class:`~scrapy.Spider` object
@@ -305,6 +311,33 @@ spider_error
     :param spider: the spider which raised the exception
     :type spider: :class:`~scrapy.Spider` object
 
+feed_slot_closed
+~~~~~~~~~~~~~~~~
+
+.. signal:: feed_slot_closed
+.. function:: feed_slot_closed(slot)
+
+    Sent when a :ref:`feed exports <topics-feed-exports>` slot is closed.
+
+    This signal supports returning deferreds from its handlers.
+
+    :param slot: the slot closed
+    :type slot: scrapy.extensions.feedexport.FeedSlot
+
+
+feed_exporter_closed
+~~~~~~~~~~~~~~~~~~~~
+
+.. signal:: feed_exporter_closed
+.. function:: feed_exporter_closed()
+
+    Sent when the :ref:`feed exports <topics-feed-exports>` extension is closed,
+    during the handling of the :signal:`spider_closed` signal by the extension,
+    after all feed exporting has been handled.
+
+    This signal supports returning deferreds from its handlers.
+
+
 Request signals
 ---------------
 
@@ -314,10 +347,17 @@ request_scheduled
 .. signal:: request_scheduled
 .. function:: request_scheduled(request, spider)
 
-    Sent when the engine schedules a :class:`~scrapy.Request`, to be
-    downloaded later.
+    Sent when the engine is asked to schedule a :class:`~scrapy.Request`, to be
+    downloaded later, before the request reaches the :ref:`scheduler
+    <topics-scheduler>`.
+
+    Raise :exc:`~scrapy.exceptions.IgnoreRequest` to drop a request before it
+    reaches the scheduler.
 
     This signal does not support returning deferreds from its handlers.
+
+    .. versionadded:: 2.11.2
+        Allow dropping requests with :exc:`~scrapy.exceptions.IgnoreRequest`.
 
     :param request: the request that reached the scheduler
     :type request: :class:`~scrapy.Request` object
